@@ -1,0 +1,9 @@
+#define X_MIN_DEF -0.1
+#define X_MAX_DEF 0.1
+#define Y_MIN_DEF -0.1
+#define Y_MAX_DEF 0.1
+#define INTERPOLATIONPOINTS_DEF 2000
+#define NX_DEF 103
+#define NY_DEF 86
+#define EFF_RADIUS_DEF 0.1
+#define FLITER_BETA_DEF 1.3
