@@ -2,7 +2,7 @@
 #define X_MAX_DEF 0.1
 #define Y_MIN_DEF -0.1
 #define Y_MAX_DEF 0.1
-#define INTERPOLATIONPOINTS_DEF 2000
+#define INTERPOLATIONPOINTS_DEF 1000
 #define NX_DEF 154
 #define NY_DEF 129
 #define EFF_RADIUS_DEF 0.1
