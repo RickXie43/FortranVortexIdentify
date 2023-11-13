@@ -6,4 +6,4 @@
 #define NX_DEF 154
 #define NY_DEF 129
 #define EFF_RADIUS_DEF 0.1
-#define FLITER_BETA_DEF 1.3
+#define FLITER_BETA_DEF 1.4
