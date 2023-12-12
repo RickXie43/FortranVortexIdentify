@@ -20,6 +20,7 @@
 !  21/04/23        Rick                add subroutine find_flitervalue to determine flitervalue in main
 !  12/08/23        Rick                add parameter fliter_beta to recuce fake vprtex, default should be 1.0
 !  09/11/23        Rick                add include macrodefinitions in parameters.F90 to set constants
+!  12/12/23        Rick                add subroutine vortexarea to calculate and record the area of a vortex
 !
 !============================================================
 !Usage:
@@ -50,7 +51,7 @@ Module find_vortex
         Integer, Parameter::ny = NY_DEF                                         !the original point number in y dimension
         Real, Parameter::eff_radius = EFF_RADIUS_DEF                            !the effective radius(Unit:M), data out of range will be drop
         Integer, Parameter::fliter_switch = 1                                   !0 to turn of fliter, 1 to turn on fliter with flitervalue
-        Real,Parameter::fliter_beta = FLITER_BETA_DEF                           !multiple a parameter on fliter value to reduce fake vortex.
+        Real, Parameter::fliter_beta = FLITER_BETA_DEF                           !multiple a parameter on fliter value to reduce fake vortex.
         !the definition of the element(derive type) of outputvortexarray
         Type::vortex
                 Real::xc = 0.
@@ -60,6 +61,7 @@ Module find_vortex
                 Integer::direction = 0
                 Integer::time = 0
                 Real::maximumvorticity = 0.
+                Real::area = 0.
                 Type(vortex), Pointer::previous_vortex => Null()
                 Type(vortex), Pointer::next_vortex => Null()
                 Integer::beginmarker = 1
@@ -159,6 +161,9 @@ Contains
 
                 !record center of vortex, total vorticity and maximumvorticity
                 Call vortexcenter(outputvortexarray, groupvalue, vorticity, x, y)
+
+                !record the area of vortex
+                Call vortexarea(outputvortexarray, groupvalue)
 
                 !vortex fliter: drop turbulence plume with maximumvorticity less than most probable maximumvorticity
                 ifpresent_flitervalue: If (present(flitervalue)) Then
@@ -294,17 +299,17 @@ Contains
                 Open (Unit=99, File=dataname, Status='Old', Iostat=ierror)
                 Read (99, *)
                 countmnumber: Do
-                Read (99, *) throw, check, throw, throw
-                endcheckm: If (Abs(checkbefore - check) > 0.01 .And. countm /= 0) Then
-                        Exit countmnumber
-                End If endcheckm
-                countm = countm + 1
-                checkbefore = check
+                        Read (99, *) throw, check, throw, throw
+                        endcheckm: If (Abs(checkbefore - check) > 0.01 .And. countm /= 0) Then
+                                Exit countmnumber
+                        End If endcheckm
+                        countm = countm + 1
+                        checkbefore = check
                 End Do countmnumber
                 m = countm
                 Do While (.Not. eof(99))
-                Read (99, *)
-                countn = countn + 1
+                        Read (99, *)
+                        countn = countn + 1
                 End do
                 n = (countn + countm + 1)/m
                 Close (Unit=99)
@@ -321,7 +326,7 @@ Contains
                 Read (9, *)
                 readdata_n: Do j = 1, n
                 readdata_m: Do i = 1, m
-                Read (9, *) x(i, j), y(i, j), u(i, j), v(i, j)
+                        Read (9, *) x(i, j), y(i, j), u(i, j), v(i, j)
                 End Do readdata_m
                 End Do readdata_n
                 Close (Unit=9)
@@ -375,17 +380,17 @@ Contains
 
                 !Set x,y of originaldata
                 setx: Do i = 1, nx
-                x_array(i) = x(i, 1)
+                        x_array(i) = x(i, 1)
                 End Do setx
                 sety: Do j = 1, ny
-                y_array(j) = y(1, ny - j + 1)
+                        y_array(j) = y(1, ny - j + 1)
                 End Do sety
 
                 !Set u,v of orginaldata
                 setuv: Do i = 1, nx
                 setuvj: Do j = 1, ny
-                u_2d(i, j) = u(i, ny - j + 1)
-                v_2d(i, j) = v(i, ny - j + 1)
+                        u_2d(i, j) = u(i, ny - j + 1)
+                        v_2d(i, j) = v(i, ny - j + 1)
                 End Do setuvj
                 End Do setuv
 
@@ -412,22 +417,22 @@ Contains
                 !set x, y after interpolation
                 setxinter: Do i = 1, interpolationpoints
                 setyinter: Do j = 1, interpolationpoints
-                x_interpolation(i, j) = x_min + i*(x_max - x_min)/interpolationpoints
-                y_interpolation(i, j) = y_min + j*(y_max - y_min)/interpolationpoints
+                        x_interpolation(i, j) = x_min + i*(x_max - x_min)/interpolationpoints
+                        y_interpolation(i, j) = y_min + j*(y_max - y_min)/interpolationpoints
                 End Do setyinter
                 End Do setxinter
 
                 !set u, v after interpolation
                 setvelocityi: Do i = 1, interpolationpoints
                 setvelocityj: Do j = 1, interpolationpoints
-                xx = x_interpolation(i, j)
-                yy = y_interpolation(i, j)
-                Call db2val(xx, yy, 0, 0, tx, ty, nx, ny, kx, ky,&
-                        &coefficient_u, uu, iflag, inbvx, inbvy, iloy, w1_2du, w2_2du)
-                u_interpolation(i, j) = uu
-                Call db2val(xx, yy, 0, 0, tx, ty, nx, ny, kx, ky,&
-                        &coefficient_v, vv, iflag, inbvx, inbvy, iloy, w1_2dv, w2_2dv)
-                v_interpolation(i, j) = vv
+                        xx = x_interpolation(i, j)
+                        yy = y_interpolation(i, j)
+                        Call db2val(xx, yy, 0, 0, tx, ty, nx, ny, kx, ky,&
+                                &coefficient_u, uu, iflag, inbvx, inbvy, iloy, w1_2du, w2_2du)
+                        u_interpolation(i, j) = uu
+                        Call db2val(xx, yy, 0, 0, tx, ty, nx, ny, kx, ky,&
+                                &coefficient_v, vv, iflag, inbvx, inbvy, iloy, w1_2dv, w2_2dv)
+                        v_interpolation(i, j) = vv
                 End Do setvelocityj
                 End Do setvelocityi
 
@@ -444,11 +449,11 @@ Contains
                 Integer::i, j
                 calculate_bm: Do i = 2, m - 1
                 calculate_bn: Do j = 2, n - 1
-                ux(i, j) = (u(i + 1, j) - u(i - 1, j))/(x(i + 1, j) - x(i - 1, j))
-                uy(i, j) = (u(i, j + 1) - u(i, j - 1))/(y(i, j + 1) - y(i, j - 1))
-                vx(i, j) = (v(i + 1, j) - v(i - 1, j))/(x(i + 1, j) - x(i - 1, j))
-                vy(i, j) = (v(i, j + 1) - v(i, j - 1))/(y(i, j + 1) - y(i, j - 1))
-                vorticity(i, j) = vx(i, j) - uy(i, j)
+                        ux(i, j) = (u(i + 1, j) - u(i - 1, j))/(x(i + 1, j) - x(i - 1, j))
+                        uy(i, j) = (u(i, j + 1) - u(i, j - 1))/(y(i, j + 1) - y(i, j - 1))
+                        vx(i, j) = (v(i + 1, j) - v(i - 1, j))/(x(i + 1, j) - x(i - 1, j))
+                        vy(i, j) = (v(i, j + 1) - v(i, j - 1))/(y(i, j + 1) - y(i, j - 1))
+                        vorticity(i, j) = vx(i, j) - uy(i, j)
                 End Do calculate_bn
                 End Do calculate_bm
         End Subroutine calculatebasicmatrix
@@ -488,15 +493,15 @@ Contains
                 !1.calculate matrix: alpha, beta
                 calculate_m: Do i = 2, m - 1
                 calculate_n: Do j = 2, n - 1
-                alpha(i, j) = 0.5*sqrt((vy(i, j) - ux(i, j))**2 + (vx(i, j) + uy(i, j))**2)
-                beta(i, j) = 0.5*vorticity(i, j)
+                        alpha(i, j) = 0.5*sqrt((vy(i, j) - ux(i, j))**2 + (vx(i, j) + uy(i, j))**2)
+                        beta(i, j) = 0.5*vorticity(i, j)
                 End Do calculate_n
                 End Do calculate_m
 
                 !2.calculate parameter epsilon
                 ba_m: do i = 2, m - 1
                 ba_n: do j = 2, n - 1
-                ba(i, j) = beta(i, j)**2 - alpha(i, j)**2
+                        ba(i, j) = beta(i, j)**2 - alpha(i, j)**2
                 end do ba_n
                 end do ba_m
                 maxba = maxval(ba)
@@ -505,7 +510,7 @@ Contains
                 !3.calculate omegar and omegar_limit(the matrix used to group vortex)
                 omegar_m: Do i = 2, m - 1
                 omegar_n: Do j = 2, n - 1
-                omegar(i, j) = (beta(i, j))**2/(alpha(i, j)**2 + beta(i, j)**2 + epsil)
+                        omegar(i, j) = (beta(i, j))**2/(alpha(i, j)**2 + beta(i, j)**2 + epsil)
                 End Do omegar_n
                 End Do omegar_m
 
@@ -548,7 +553,7 @@ Contains
                 !1. calculate matrix: q_matrix
                 qcalculate_m: Do i = 2, m - 1
                 qcalculate_n: Do j = 2, n - 1
-                q_matrix(i, j) = (ux(i, j) + vy(i, j))**2 - 4*(ux(i, j)*vy(i, j) - vx(i, j)*uy(i, j))
+                        q_matrix(i, j) = (ux(i, j) + vy(i, j))**2 - 4*(ux(i, j)*vy(i, j) - vx(i, j)*uy(i, j))
                 End Do qcalculate_n
                 End Do qcalculate_m
 
@@ -556,14 +561,14 @@ Contains
                 averq = 0
                 qsscalculate_m: Do i = 2, m - 1
                 qsscalculate_n: Do j = 2, n - 1
-                averq = averq + q_matrix(i, j)
+                        averq = averq + q_matrix(i, j)
                 End Do qsscalculate_n
                 End Do qsscalculate_m
                 averq = averq/((m - 2)*(n - 2))
                 varianceq = 0
                 qscalculate_m: Do i = 2, m - 1
                 qscalculate_n: Do j = 2, n - 1
-                varianceq = varianceq + (q_matrix(i, j) - averq)**2
+                        varianceq = varianceq + (q_matrix(i, j) - averq)**2
                 End Do qscalculate_n
                 End Do qscalculate_m
                 varianceq = sqrt(varianceq/((m - 2)*(n - 2)))
@@ -618,11 +623,11 @@ Contains
                 groupnumber = 1
                 setgroupvalue_m: do i = 1, m
                 setgroupvalue_n: Do j = 1, n
-                !set only if has groupjudgevalue and hasn't been set
-                judgevalue: If (groupjudgevalue(i, j) > 0 .And. groupvalue(i, j) == 0) Then
-                        Call setvortexgroupnumber(i, j, groupvalue, groupnumber, groupjudgevalue)
-                        groupnumber = groupnumber + 1
-                End If judgevalue
+                        !set only if has groupjudgevalue and hasn't been set
+                        judgevalue: If (groupjudgevalue(i, j) > 0 .And. groupvalue(i, j) == 0) Then
+                                Call setvortexgroupnumber(i, j, groupvalue, groupnumber, groupjudgevalue)
+                                groupnumber = groupnumber + 1
+                        End If judgevalue
                 End Do setgroupvalue_n
                 End Do setgroupvalue_m
         End Subroutine groupallvortex
@@ -688,10 +693,10 @@ Contains
 
                 !record maxvorticity to outputvortexarray
                 recordtoarray: Do i = 1, vortex_amount
-                outputvortexarray(i)%xc = maxvorticity(i, 1)
-                outputvortexarray(i)%yc = maxvorticity(i, 2)
-                outputvortexarray(i)%vorticity = maxvorticity(i, 3)
-                outputvortexarray(i)%maximumvorticity = maxvorticity(i, 4)
+                        outputvortexarray(i)%xc = maxvorticity(i, 1)
+                        outputvortexarray(i)%yc = maxvorticity(i, 2)
+                        outputvortexarray(i)%vorticity = maxvorticity(i, 3)
+                        outputvortexarray(i)%maximumvorticity = maxvorticity(i, 4)
                 End Do recordtoarray
         End Subroutine vortexcenter
 
@@ -706,24 +711,53 @@ Contains
                 dx = x(2, 1) - x(1, 1)
                 dy = y(1, 2) - y(1, 1)
                 forallvortex: Do k = 1, size(maxvorticity(:, 1))
-                i = maxvorticityij(k, 1)
-                j = maxvorticityij(k, 2)
-                zx1 = vorticity(i - 1, j)
-                zx2 = vorticity(i, j)
-                zx3 = vorticity(i + 1, j)
-                zy1 = vorticity(i, j - 1)
-                zy2 = vorticity(i, j)
-                zy3 = vorticity(i, j + 1)
-                ifmaxinmiddle_x: If (zx2 > zx1 .And. zx2 > zx3) Then
-                        xcenter = x(i, j) + dx*(zx1 - zx3)/(2*(zx1 - 2*zx2 + zx3))
-                        maxvorticity(k, 1) = xcenter
-                End If ifmaxinmiddle_x
-                ifmaxinmiddle_y: If (zy2 > zy1 .And. zy2 > zy3) Then
-                        ycenter = y(i, j) + dy*(zy1 - zy3)/(2*(zy1 - 2*zy2 + zy3))
-                        maxvorticity(k, 2) = ycenter
-                End If ifmaxinmiddle_y
+                        i = maxvorticityij(k, 1)
+                        j = maxvorticityij(k, 2)
+                        zx1 = vorticity(i - 1, j)
+                        zx2 = vorticity(i, j)
+                        zx3 = vorticity(i + 1, j)
+                        zy1 = vorticity(i, j - 1)
+                        zy2 = vorticity(i, j)
+                        zy3 = vorticity(i, j + 1)
+                        ifmaxinmiddle_x: If (zx2 > zx1 .And. zx2 > zx3) Then
+                                xcenter = x(i, j) + dx*(zx1 - zx3)/(2*(zx1 - 2*zx2 + zx3))
+                                maxvorticity(k, 1) = xcenter
+                        End If ifmaxinmiddle_x
+                        ifmaxinmiddle_y: If (zy2 > zy1 .And. zy2 > zy3) Then
+                                ycenter = y(i, j) + dy*(zy1 - zy3)/(2*(zy1 - 2*zy2 + zy3))
+                                maxvorticity(k, 2) = ycenter
+                        End If ifmaxinmiddle_y
                 End Do forallvortex
         End Subroutine accurate_center
+
+        !the subroutine to record the area of vortex
+        Subroutine vortexarea(outputvortexarray, groupvalue)
+                Implicit None
+                Integer::vortex_amount
+                Integer, Intent(In), Dimension(:, :)::groupvalue
+                Type(vortex), Intent(InOut), Dimension(:)::outputvortexarray    !an array of type vortex
+                Integer, Dimension(:), Allocatable::vortexpoints                !the points number of a vortex
+                Real::pointsarea                                                !the area for a point
+                Integer::i, j
+                vortex_amount = size(outputvortexarray)
+                Allocate (vortexpoints(vortex_amount))
+                vortexpoints = 0
+                pointsarea = (x_max - x_min)*(y_max - y_min)/(m*n)
+
+                !calculate the points of vortex i using groupvalue matrix
+                areaxi: Do i = 1, m
+                        areayj: Do j = 1, n
+                        areainavortex: If (groupvalue(i, j) /= 0) Then
+                                vortexpoints(groupvalue(i, j)) = vortexpoints(groupvalue(i, j)) + 1
+                        End If areainavortex
+                        End Do areayj
+                End Do areaxi
+
+                !record area to outputvortexarray
+                recordareatoarray: Do i = 1, vortex_amount
+                        outputvortexarray(i)%area = vortexpoints(i)*pointsarea
+                End Do recordareatoarray
+        End Subroutine vortexarea
 
         !the subroutine definition to record time, neardistance and direction of vortex
         Subroutine vortexinfo1(outputvortexarray, dataname)
@@ -738,16 +772,16 @@ Contains
 
                 !set the time and direction of vortex
                 setvortexforeach: Do i = 1, vortex_amount
-                outputvortexarray(i)%time = time
-                setvortexdirection: If (outputvortexarray(i)%vorticity > 0) Then
-                        outputvortexarray(i)%direction = 1
-                Else
-                        outputvortexarray(i)%direction = -1
-                End If setvortexdirection
+                        outputvortexarray(i)%time = time
+                        setvortexdirection: If (outputvortexarray(i)%vorticity > 0) Then
+                                outputvortexarray(i)%direction = 1
+                        Else
+                                outputvortexarray(i)%direction = -1
+                        End If setvortexdirection
                 End Do setvortexforeach
 
                 nearvortex: Do i = 1, vortex_amount
-                outputvortexarray(i)%neardistance = sqrt(eff_radius**2*3.1415/vortex_amount)
+                        outputvortexarray(i)%neardistance = sqrt(eff_radius**2*3.1415/vortex_amount)
                 End Do nearvortex
 
                 !                !set the nearest distance of vortex
@@ -789,17 +823,17 @@ Contains
                 !calculate average maximumvorticity
                 meanmaximumvorticity = 0
                 totalmaximumvorticity: Do i = 1, size(outputvortexarray)
-                meanmaximumvorticity = meanmaximumvorticity + abs(outputvortexarray(i)%maximumvorticity)
+                        meanmaximumvorticity = meanmaximumvorticity + abs(outputvortexarray(i)%maximumvorticity)
                 End Do totalmaximumvorticity
                 meanmaximumvorticity = meanmaximumvorticity/size(outputvortexarray)
 
                 !histrogram list and find most probable maximumvorticity
                 histgramlist = 0
                 gethistrogramlist: Do i = 1, size(outputvortexarray)
-                binposition = ceiling(abs(outputvortexarray(i)%maximumvorticity)/(2*meanmaximumvorticity/bins))
-                notoutofrange: If (.Not. binposition > bins) Then
-                        histgramlist(binposition) = histgramlist(binposition) + 1
-                End If notoutofrange
+                        binposition = ceiling(abs(outputvortexarray(i)%maximumvorticity)/(2*meanmaximumvorticity/bins))
+                        notoutofrange: If (.Not. binposition > bins) Then
+                                histgramlist(binposition) = histgramlist(binposition) + 1
+                        End If notoutofrange
                 End Do gethistrogramlist
                 findflitervalue: Do i = 1, bins
                 foundsuccessful: If (histgramlist(i) == maxval(histgramlist)) Then
@@ -867,12 +901,13 @@ Contains
                 Open (Unit=10, File=outputfilename, Status='New', Iostat=ierror)
                 !First and second line is the information of vortex data
                 Write (10, "(A27,100a)") 'The data of Vortex of file ', dataname
-                Write (10, "(120a)") 'xc(m) yc(m) vorticity(m*s) direction time(frame) nearest distance(m) maximumvorticity(1/s)'
+                Write (10, "(130a)") 'xc(m) yc(m) vorticity(m*s) direction time(frame) nearest distance(m) maximumvorticity(1/s)&
+                        & area(m^2)'
                 writevortex: Do i = 1, size(outputvortexarray)
-                Write (10, "(2F14.7,F20.8,2I7,F14.7,F20.8)") outputvortexarray(i)%xc, outputvortexarray(i)%yc,&
-                        &outputvortexarray(i)%vorticity, outputvortexarray(i)%direction,&
-                        &outputvortexarray(i)%time, outputvortexarray(i)%neardistance,&
-                        &outputvortexarray(i)%maximumvorticity
+                        Write (10, "(2F14.7,F20.8,2I7,F14.7,F20.8,F20.10)") outputvortexarray(i)%xc, outputvortexarray(i)%yc,&
+                                &outputvortexarray(i)%vorticity, outputvortexarray(i)%direction,&
+                                &outputvortexarray(i)%time, outputvortexarray(i)%neardistance,&
+                                &outputvortexarray(i)%maximumvorticity, outputvortexarray(i)%area
                 End Do writevortex
                 Close (Unit=10)
         End Subroutine writedata
