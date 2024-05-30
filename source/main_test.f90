@@ -12,9 +12,11 @@ Program testfindvortex
         Use find_vortex
         Implicit None
         Real::value1 = 0
-        Call find_flitervalue('./data/B00001.txt', value1)
+        Character(len=50)::testdataname
+        testdataname='./data/B00001.txt'
+        Call find_flitervalue(trim(testdataname), value1)
         Write (*, *) value1
-        Call findvortex('./data/B00001.txt',&
+        Call findvortex(trim(testdataname),&
                 &outputfilename='vortexdata.txt',&
                 &flitervalue=value1)
 End Program testfindvortex

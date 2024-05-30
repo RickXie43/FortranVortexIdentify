@@ -21,6 +21,8 @@
 !  12/08/23        Rick                add parameter fliter_beta to recuce fake vprtex, default should be 1.0
 !  09/11/23        Rick                add include macrodefinitions in parameters.F90 to set constants
 !  12/12/23        Rick                add subroutine vortexarea to calculate and record the area of a vortex
+!  30/05/24        Rick                fix bug, the order of x_array and y_array should be strictly increasing in
+!  bicubicinterpolation
 !
 !============================================================
 !Usage:
@@ -47,8 +49,8 @@ Module find_vortex
         Real, Parameter::y_min = Y_MIN_DEF
         Real, Parameter::y_max = Y_MAX_DEF
         Integer, Parameter::interpolationpoints = INTERPOLATIONPOINTS_DEF       !interpolation points in two dimension using bicubic
-        Integer, Parameter::nx = NX_DEF                                         !the original point number in y dimension
-        Integer, Parameter::ny = NY_DEF                                         !the original point number in y dimension
+        Integer, Parameter::nx = NX_DEF                                         !the original point number in x, in interpolation
+        Integer, Parameter::ny = NY_DEF                                         !the original point number in y
         Real, Parameter::eff_radius = EFF_RADIUS_DEF                            !the effective radius(Unit:M), data out of range will be drop
         Integer, Parameter::fliter_switch = 1                                   !0 to turn of fliter, 1 to turn on fliter with flitervalue
         Real, Parameter::fliter_beta = FLITER_BETA_DEF                           !multiple a parameter on fliter value to reduce fake vortex.
@@ -299,17 +301,17 @@ Contains
                 Open (Unit=99, File=dataname, Status='Old', Iostat=ierror)
                 Read (99, *)
                 countmnumber: Do
-                        Read (99, *) throw, check, throw, throw
-                        endcheckm: If (Abs(checkbefore - check) > 0.01 .And. countm /= 0) Then
-                                Exit countmnumber
-                        End If endcheckm
-                        countm = countm + 1
-                        checkbefore = check
+                Read (99, *) throw, check, throw, throw
+                endcheckm: If (Abs(checkbefore - check) > 0.01 .And. countm /= 0) Then
+                        Exit countmnumber
+                End If endcheckm
+                countm = countm + 1
+                checkbefore = check
                 End Do countmnumber
                 m = countm
                 Do While (.Not. eof(99))
-                        Read (99, *)
-                        countn = countn + 1
+                Read (99, *)
+                countn = countn + 1
                 End do
                 n = (countn + countm + 1)/m
                 Close (Unit=99)
@@ -326,7 +328,7 @@ Contains
                 Read (9, *)
                 readdata_n: Do j = 1, n
                 readdata_m: Do i = 1, m
-                        Read (9, *) x(i, j), y(i, j), u(i, j), v(i, j)
+                Read (9, *) x(i, j), y(i, j), u(i, j), v(i, j)
                 End Do readdata_m
                 End Do readdata_n
                 Close (Unit=9)
@@ -348,6 +350,7 @@ Contains
                 Integer, Intent(InOut)::m, n
                 Real, Intent(Out), Dimension(:, :)::x_interpolation, y_interpolation, u_interpolation, v_interpolation
                 Integer::i, j
+                Integer::xorder, yorder
                 !                Integer(ip), parameter :: nx = 103     !! number of points in x
                 !                Integer(ip), parameter :: ny = 86     !! number of points in y
                 Integer(ip), parameter :: kx = 4     !! order in x
@@ -378,37 +381,73 @@ Contains
                         Write (*, *) 'PLEASE reset the nx, ny!'
                 End If conformmn
 
+                !the x,y array should be strictly increasing, due to interpolation function, test order
+                xorderjudge: If(x(2,1)-x(1,1)>0) Then
+                        xorder = 1
+                Else
+                        xorder = -1
+                End If xorderjudge
+                yorderjudge: If(y(1,2)-y(1,1)>0) Then
+                        yorder = 1
+                Else
+                        yorder = -1
+                End If yorderjudge
+
                 !Set x,y of originaldata
-                setx: Do i = 1, nx
+                xoriginaldata: If(xorder > 0) Then
+                        setx1: Do i = 1, nx
                         x_array(i) = x(i, 1)
-                End Do setx
-                sety: Do j = 1, ny
+                        End Do setx1
+                Else
+                        setx2: Do i = 1, nx
+                        x_array(i) = x(nx - i + 1, 1)
+                        End Do setx2
+                End If xoriginaldata
+                yoriginaldata: If(yorder > 0) Then
+                        sety1: Do j = 1, ny
+                        y_array(j) = y(1, j)
+                        End Do sety1
+                Else
+                        sety2: Do j = 1, ny
                         y_array(j) = y(1, ny - j + 1)
-                End Do sety
+                        End Do sety2
+                End If yoriginaldata
 
-                !Set u,v of orginaldata
-                setuv: Do i = 1, nx
-                setuvj: Do j = 1, ny
-                        u_2d(i, j) = u(i, ny - j + 1)
-                        v_2d(i, j) = v(i, ny - j + 1)
-                End Do setuvj
-                End Do setuv
+                !Set u,v of orginaldata, same as x,y order
+                iforder1: If(xorder>0) Then
+                        iforder2: If(yorder>0) Then
+                                setuv1: Do i = 1, nx
+                                setuvj1: Do j = 1, ny
+                                u_2d(i, j) = u(i, j)
+                                v_2d(i, j) = v(i, j)
+                                End Do setuvj1
+                                End Do setuv1
+                        Else
+                                setuv2: Do i = 1, nx
+                                setuvj2: Do j = 1, ny
+                                u_2d(i, j) = u(i, ny - j + 1)
+                                v_2d(i, j) = v(i, ny - j + 1)
+                                End Do setuvj2
+                                End Do setuv2
+                        End If iforder2
+                Else
+                        iforder3: If(yorder>0) Then
+                                setuv3: Do i = 1, nx
+                                setuvj3: Do j = 1, ny
+                                u_2d(i, j) = u(nx-i+1, j)
+                                v_2d(i, j) = v(nx-i+1, j)
+                                End Do setuvj3
+                                End Do setuv3
+                        Else
+                                setuv4: Do i = 1, nx
+                                setuvj4: Do j = 1, ny
+                                u_2d(i, j) = u(nx-i+1, ny - j + 1)
+                                v_2d(i, j) = v(nx-i+1, ny - j + 1)
+                                End Do setuvj4
+                                End Do setuv4
+                        End If iforder3
+                End If iforder1
 
-                !               !Set x,y of originaldata
-                !               setx: Do i = 1, nx
-                !                       x_array(i) = x(i, 1)
-                !               End Do setx
-                !               sety: Do j = 1, ny
-                !                       y_array(j) = y(1, j)
-                !               End Do sety
-                !
-                !               !Set u,v of orginaldata
-                !               setuv: Do i = 1, nx
-                !                       setuvj: Do j = 1, ny
-                !                               u_2d(i, j) = u(i, j)
-                !                               v_2d(i, j) = v(i, j)
-                !                       End Do setuvj
-                !               End Do setuv
 
                 !calculate interpolation coefficient
                 Call db2ink(x_array, nx, y_array, ny, u_2d, kx, ky, iknot, tx, ty, coefficient_u, iflag)
@@ -417,22 +456,22 @@ Contains
                 !set x, y after interpolation
                 setxinter: Do i = 1, interpolationpoints
                 setyinter: Do j = 1, interpolationpoints
-                        x_interpolation(i, j) = x_min + i*(x_max - x_min)/interpolationpoints
-                        y_interpolation(i, j) = y_min + j*(y_max - y_min)/interpolationpoints
+                x_interpolation(i, j) = x_min + i*(x_max - x_min)/interpolationpoints
+                y_interpolation(i, j) = y_min + j*(y_max - y_min)/interpolationpoints
                 End Do setyinter
                 End Do setxinter
 
                 !set u, v after interpolation
                 setvelocityi: Do i = 1, interpolationpoints
                 setvelocityj: Do j = 1, interpolationpoints
-                        xx = x_interpolation(i, j)
-                        yy = y_interpolation(i, j)
-                        Call db2val(xx, yy, 0, 0, tx, ty, nx, ny, kx, ky,&
-                                &coefficient_u, uu, iflag, inbvx, inbvy, iloy, w1_2du, w2_2du)
-                        u_interpolation(i, j) = uu
-                        Call db2val(xx, yy, 0, 0, tx, ty, nx, ny, kx, ky,&
-                                &coefficient_v, vv, iflag, inbvx, inbvy, iloy, w1_2dv, w2_2dv)
-                        v_interpolation(i, j) = vv
+                xx = x_interpolation(i, j)
+                yy = y_interpolation(i, j)
+                Call db2val(xx, yy, 0, 0, tx, ty, nx, ny, kx, ky,&
+                        &coefficient_u, uu, iflag, inbvx, inbvy, iloy, w1_2du, w2_2du)
+                u_interpolation(i, j) = uu
+                Call db2val(xx, yy, 0, 0, tx, ty, nx, ny, kx, ky,&
+                        &coefficient_v, vv, iflag, inbvx, inbvy, iloy, w1_2dv, w2_2dv)
+                v_interpolation(i, j) = vv
                 End Do setvelocityj
                 End Do setvelocityi
 
@@ -449,11 +488,11 @@ Contains
                 Integer::i, j
                 calculate_bm: Do i = 2, m - 1
                 calculate_bn: Do j = 2, n - 1
-                        ux(i, j) = (u(i + 1, j) - u(i - 1, j))/(x(i + 1, j) - x(i - 1, j))
-                        uy(i, j) = (u(i, j + 1) - u(i, j - 1))/(y(i, j + 1) - y(i, j - 1))
-                        vx(i, j) = (v(i + 1, j) - v(i - 1, j))/(x(i + 1, j) - x(i - 1, j))
-                        vy(i, j) = (v(i, j + 1) - v(i, j - 1))/(y(i, j + 1) - y(i, j - 1))
-                        vorticity(i, j) = vx(i, j) - uy(i, j)
+                ux(i, j) = (u(i + 1, j) - u(i - 1, j))/(x(i + 1, j) - x(i - 1, j))
+                uy(i, j) = (u(i, j + 1) - u(i, j - 1))/(y(i, j + 1) - y(i, j - 1))
+                vx(i, j) = (v(i + 1, j) - v(i - 1, j))/(x(i + 1, j) - x(i - 1, j))
+                vy(i, j) = (v(i, j + 1) - v(i, j - 1))/(y(i, j + 1) - y(i, j - 1))
+                vorticity(i, j) = vx(i, j) - uy(i, j)
                 End Do calculate_bn
                 End Do calculate_bm
         End Subroutine calculatebasicmatrix
@@ -493,15 +532,15 @@ Contains
                 !1.calculate matrix: alpha, beta
                 calculate_m: Do i = 2, m - 1
                 calculate_n: Do j = 2, n - 1
-                        alpha(i, j) = 0.5*sqrt((vy(i, j) - ux(i, j))**2 + (vx(i, j) + uy(i, j))**2)
-                        beta(i, j) = 0.5*vorticity(i, j)
+                alpha(i, j) = 0.5*sqrt((vy(i, j) - ux(i, j))**2 + (vx(i, j) + uy(i, j))**2)
+                beta(i, j) = 0.5*vorticity(i, j)
                 End Do calculate_n
                 End Do calculate_m
 
                 !2.calculate parameter epsilon
                 ba_m: do i = 2, m - 1
                 ba_n: do j = 2, n - 1
-                        ba(i, j) = beta(i, j)**2 - alpha(i, j)**2
+                ba(i, j) = beta(i, j)**2 - alpha(i, j)**2
                 end do ba_n
                 end do ba_m
                 maxba = maxval(ba)
@@ -510,7 +549,7 @@ Contains
                 !3.calculate omegar and omegar_limit(the matrix used to group vortex)
                 omegar_m: Do i = 2, m - 1
                 omegar_n: Do j = 2, n - 1
-                        omegar(i, j) = (beta(i, j))**2/(alpha(i, j)**2 + beta(i, j)**2 + epsil)
+                omegar(i, j) = (beta(i, j))**2/(alpha(i, j)**2 + beta(i, j)**2 + epsil)
                 End Do omegar_n
                 End Do omegar_m
 
@@ -553,7 +592,7 @@ Contains
                 !1. calculate matrix: q_matrix
                 qcalculate_m: Do i = 2, m - 1
                 qcalculate_n: Do j = 2, n - 1
-                        q_matrix(i, j) = (ux(i, j) + vy(i, j))**2 - 4*(ux(i, j)*vy(i, j) - vx(i, j)*uy(i, j))
+                q_matrix(i, j) = (ux(i, j) + vy(i, j))**2 - 4*(ux(i, j)*vy(i, j) - vx(i, j)*uy(i, j))
                 End Do qcalculate_n
                 End Do qcalculate_m
 
@@ -561,14 +600,14 @@ Contains
                 averq = 0
                 qsscalculate_m: Do i = 2, m - 1
                 qsscalculate_n: Do j = 2, n - 1
-                        averq = averq + q_matrix(i, j)
+                averq = averq + q_matrix(i, j)
                 End Do qsscalculate_n
                 End Do qsscalculate_m
                 averq = averq/((m - 2)*(n - 2))
                 varianceq = 0
                 qscalculate_m: Do i = 2, m - 1
                 qscalculate_n: Do j = 2, n - 1
-                        varianceq = varianceq + (q_matrix(i, j) - averq)**2
+                varianceq = varianceq + (q_matrix(i, j) - averq)**2
                 End Do qscalculate_n
                 End Do qscalculate_m
                 varianceq = sqrt(varianceq/((m - 2)*(n - 2)))
@@ -623,11 +662,11 @@ Contains
                 groupnumber = 1
                 setgroupvalue_m: do i = 1, m
                 setgroupvalue_n: Do j = 1, n
-                        !set only if has groupjudgevalue and hasn't been set
-                        judgevalue: If (groupjudgevalue(i, j) > 0 .And. groupvalue(i, j) == 0) Then
-                                Call setvortexgroupnumber(i, j, groupvalue, groupnumber, groupjudgevalue)
-                                groupnumber = groupnumber + 1
-                        End If judgevalue
+                !set only if has groupjudgevalue and hasn't been set
+                judgevalue: If (groupjudgevalue(i, j) > 0 .And. groupvalue(i, j) == 0) Then
+                        Call setvortexgroupnumber(i, j, groupvalue, groupnumber, groupjudgevalue)
+                        groupnumber = groupnumber + 1
+                End If judgevalue
                 End Do setgroupvalue_n
                 End Do setgroupvalue_m
         End Subroutine groupallvortex
@@ -693,10 +732,10 @@ Contains
 
                 !record maxvorticity to outputvortexarray
                 recordtoarray: Do i = 1, vortex_amount
-                        outputvortexarray(i)%xc = maxvorticity(i, 1)
-                        outputvortexarray(i)%yc = maxvorticity(i, 2)
-                        outputvortexarray(i)%vorticity = maxvorticity(i, 3)
-                        outputvortexarray(i)%maximumvorticity = maxvorticity(i, 4)
+                outputvortexarray(i)%xc = maxvorticity(i, 1)
+                outputvortexarray(i)%yc = maxvorticity(i, 2)
+                outputvortexarray(i)%vorticity = maxvorticity(i, 3)
+                outputvortexarray(i)%maximumvorticity = maxvorticity(i, 4)
                 End Do recordtoarray
         End Subroutine vortexcenter
 
@@ -711,22 +750,22 @@ Contains
                 dx = x(2, 1) - x(1, 1)
                 dy = y(1, 2) - y(1, 1)
                 forallvortex: Do k = 1, size(maxvorticity(:, 1))
-                        i = maxvorticityij(k, 1)
-                        j = maxvorticityij(k, 2)
-                        zx1 = vorticity(i - 1, j)
-                        zx2 = vorticity(i, j)
-                        zx3 = vorticity(i + 1, j)
-                        zy1 = vorticity(i, j - 1)
-                        zy2 = vorticity(i, j)
-                        zy3 = vorticity(i, j + 1)
-                        ifmaxinmiddle_x: If (zx2 > zx1 .And. zx2 > zx3) Then
-                                xcenter = x(i, j) + dx*(zx1 - zx3)/(2*(zx1 - 2*zx2 + zx3))
-                                maxvorticity(k, 1) = xcenter
-                        End If ifmaxinmiddle_x
-                        ifmaxinmiddle_y: If (zy2 > zy1 .And. zy2 > zy3) Then
-                                ycenter = y(i, j) + dy*(zy1 - zy3)/(2*(zy1 - 2*zy2 + zy3))
-                                maxvorticity(k, 2) = ycenter
-                        End If ifmaxinmiddle_y
+                i = maxvorticityij(k, 1)
+                j = maxvorticityij(k, 2)
+                zx1 = vorticity(i - 1, j)
+                zx2 = vorticity(i, j)
+                zx3 = vorticity(i + 1, j)
+                zy1 = vorticity(i, j - 1)
+                zy2 = vorticity(i, j)
+                zy3 = vorticity(i, j + 1)
+                ifmaxinmiddle_x: If (zx2 > zx1 .And. zx2 > zx3) Then
+                        xcenter = x(i, j) + dx*(zx1 - zx3)/(2*(zx1 - 2*zx2 + zx3))
+                        maxvorticity(k, 1) = xcenter
+                End If ifmaxinmiddle_x
+                ifmaxinmiddle_y: If (zy2 > zy1 .And. zy2 > zy3) Then
+                        ycenter = y(i, j) + dy*(zy1 - zy3)/(2*(zy1 - 2*zy2 + zy3))
+                        maxvorticity(k, 2) = ycenter
+                End If ifmaxinmiddle_y
                 End Do forallvortex
         End Subroutine accurate_center
 
@@ -746,16 +785,16 @@ Contains
 
                 !calculate the points of vortex i using groupvalue matrix
                 areaxi: Do i = 1, m
-                        areayj: Do j = 1, n
-                        areainavortex: If (groupvalue(i, j) /= 0) Then
-                                vortexpoints(groupvalue(i, j)) = vortexpoints(groupvalue(i, j)) + 1
-                        End If areainavortex
-                        End Do areayj
+                areayj: Do j = 1, n
+                areainavortex: If (groupvalue(i, j) /= 0) Then
+                        vortexpoints(groupvalue(i, j)) = vortexpoints(groupvalue(i, j)) + 1
+                End If areainavortex
+                End Do areayj
                 End Do areaxi
 
                 !record area to outputvortexarray
                 recordareatoarray: Do i = 1, vortex_amount
-                        outputvortexarray(i)%area = vortexpoints(i)*pointsarea
+                outputvortexarray(i)%area = vortexpoints(i)*pointsarea
                 End Do recordareatoarray
         End Subroutine vortexarea
 
@@ -772,16 +811,16 @@ Contains
 
                 !set the time and direction of vortex
                 setvortexforeach: Do i = 1, vortex_amount
-                        outputvortexarray(i)%time = time
-                        setvortexdirection: If (outputvortexarray(i)%vorticity > 0) Then
-                                outputvortexarray(i)%direction = 1
-                        Else
-                                outputvortexarray(i)%direction = -1
-                        End If setvortexdirection
+                outputvortexarray(i)%time = time
+                setvortexdirection: If (outputvortexarray(i)%vorticity > 0) Then
+                        outputvortexarray(i)%direction = 1
+                Else
+                        outputvortexarray(i)%direction = -1
+                End If setvortexdirection
                 End Do setvortexforeach
 
                 nearvortex: Do i = 1, vortex_amount
-                        outputvortexarray(i)%neardistance = sqrt(eff_radius**2*3.1415/vortex_amount)
+                outputvortexarray(i)%neardistance = sqrt(eff_radius**2*3.1415/vortex_amount)
                 End Do nearvortex
 
                 !                !set the nearest distance of vortex
@@ -823,17 +862,17 @@ Contains
                 !calculate average maximumvorticity
                 meanmaximumvorticity = 0
                 totalmaximumvorticity: Do i = 1, size(outputvortexarray)
-                        meanmaximumvorticity = meanmaximumvorticity + abs(outputvortexarray(i)%maximumvorticity)
+                meanmaximumvorticity = meanmaximumvorticity + abs(outputvortexarray(i)%maximumvorticity)
                 End Do totalmaximumvorticity
                 meanmaximumvorticity = meanmaximumvorticity/size(outputvortexarray)
 
                 !histrogram list and find most probable maximumvorticity
                 histgramlist = 0
                 gethistrogramlist: Do i = 1, size(outputvortexarray)
-                        binposition = ceiling(abs(outputvortexarray(i)%maximumvorticity)/(2*meanmaximumvorticity/bins))
-                        notoutofrange: If (.Not. binposition > bins) Then
-                                histgramlist(binposition) = histgramlist(binposition) + 1
-                        End If notoutofrange
+                binposition = ceiling(abs(outputvortexarray(i)%maximumvorticity)/(2*meanmaximumvorticity/bins))
+                notoutofrange: If (.Not. binposition > bins) Then
+                        histgramlist(binposition) = histgramlist(binposition) + 1
+                End If notoutofrange
                 End Do gethistrogramlist
                 findflitervalue: Do i = 1, bins
                 foundsuccessful: If (histgramlist(i) == maxval(histgramlist)) Then
@@ -904,10 +943,10 @@ Contains
                 Write (10, "(130a)") 'xc(m) yc(m) vorticity(m*s) direction time(frame) nearest distance(m) maximumvorticity(1/s)&
                         & area(m^2)'
                 writevortex: Do i = 1, size(outputvortexarray)
-                        Write (10, "(2F14.7,F20.8,2I7,F14.7,F20.8,F20.10)") outputvortexarray(i)%xc, outputvortexarray(i)%yc,&
-                                &outputvortexarray(i)%vorticity, outputvortexarray(i)%direction,&
-                                &outputvortexarray(i)%time, outputvortexarray(i)%neardistance,&
-                                &outputvortexarray(i)%maximumvorticity, outputvortexarray(i)%area
+                Write (10, "(2F14.7,F20.8,2I7,F14.7,F20.8,F20.10)") outputvortexarray(i)%xc, outputvortexarray(i)%yc,&
+                        &outputvortexarray(i)%vorticity, outputvortexarray(i)%direction,&
+                        &outputvortexarray(i)%time, outputvortexarray(i)%neardistance,&
+                        &outputvortexarray(i)%maximumvorticity, outputvortexarray(i)%area
                 End Do writevortex
                 Close (Unit=10)
         End Subroutine writedata
